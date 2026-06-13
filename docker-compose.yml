@@ -1,0 +1,62 @@
+# Development stack for the ERP Starter Kit.
+#   docker compose up -d            # start Postgres + Redis only (run the app from your IDE)
+#   docker compose --profile app up # additionally build & run the backend
+#
+# Values mirror the defaults in backend/src/main/resources/application.yml.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: erp-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-erp}
+      POSTGRES_USER: ${DB_USERNAME:-erp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-erp}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - erp-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-erp} -d ${DB_NAME:-erp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - erp-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    profiles: ["app"]
+    build:
+      context: ./backend
+    container_name: erp-app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/${DB_NAME:-erp}
+      DB_USERNAME: ${DB_USERNAME:-erp}
+      DB_PASSWORD: ${DB_PASSWORD:-erp}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-Y2hhbmdlLW1lLXRoaXMtaXMtYS1kZXYtb25seS1zZWNyZXQta2V5LTEyMzQ1Njc4OTA=}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      BOOTSTRAP_DEMO_DATA: ${BOOTSTRAP_DEMO_DATA:-true}
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+
+volumes:
+  erp-db-data:
+  erp-redis-data:

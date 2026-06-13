@@ -1,0 +1,15 @@
+# Normalize line endings: LF in the repo, auto-converted on checkout.
+* text=auto eol=lf
+
+# Scripts that are platform-specific
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+*.sh    text eol=lf
+
+# Binary files (never normalize)
+*.jar   binary
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.ico   binary

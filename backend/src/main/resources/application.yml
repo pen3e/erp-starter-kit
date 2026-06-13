@@ -1,0 +1,128 @@
+spring:
+  application:
+    name: erp-starter-kit
+
+  # ---------------------------------------------------------------------------
+  # Datasource — credentials ONLY from environment / Docker secrets, never in code
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/erp}
+    username: ${DB_USERNAME:erp}
+    password: ${DB_PASSWORD:erp}
+    hikari:
+      pool-name: erp-pool
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: ${DB_POOL_MIN:2}
+      connection-timeout: 30000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate            # schema is owned by Flyway, never by Hibernate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+    show-sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-stacktrace: never
+    include-message: never
+  forward-headers-strategy: framework   # honour X-Forwarded-* behind a proxy
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: true
+        same-site: strict
+
+# -----------------------------------------------------------------------------
+# Application-specific configuration (bound to typed @ConfigurationProperties)
+# -----------------------------------------------------------------------------
+erp:
+  security:
+    jwt:
+      # Base64-encoded 256-bit (min) secret. MUST be overridden in every environment.
+      secret: ${JWT_SECRET:Y2hhbmdlLW1lLXRoaXMtaXMtYS1kZXYtb25seS1zZWNyZXQta2V5LTEyMzQ1Njc4OTA=}
+      issuer: erp-starter-kit
+      access-token-ttl: ${JWT_ACCESS_TTL:PT15M}      # 15 minutes
+      refresh-token-ttl: ${JWT_REFRESH_TTL:P7D}       # 7 days
+      remember-me-ttl: ${JWT_REMEMBER_TTL:P30D}       # 30 days
+    cors:
+      allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      # General authenticated API bucket
+      api-capacity: 100
+      api-refill-period: PT1M
+      # Authentication endpoints (login / refresh / reset) — strict anti-bruteforce
+      auth-capacity: 5
+      auth-refill-period: PT1M
+      # Number of consecutive failed logins before the account is temporarily locked
+      max-failed-logins: 5
+      lockout-duration: PT15M
+  tenant:
+    default-tenant: public
+    header-name: X-Tenant-ID
+  # Optional, idempotent demo seeding (a tenant + ADMIN role + admin user) for local dev.
+  # NEVER enable in production — the seeded credentials are well-known.
+  bootstrap:
+    demo-data: ${BOOTSTRAP_DEMO_DATA:false}
+    tenant-slug: ${BOOTSTRAP_TENANT_SLUG:demo}
+    admin-email: ${BOOTSTRAP_ADMIN_EMAIL:admin@demo.local}
+    admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:ChangeMe!2024}
+
+# -----------------------------------------------------------------------------
+# Monitoring — Actuator endpoints are locked down (see SecurityConfig)
+# -----------------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+logging:
+  level:
+    root: INFO
+    com.company.erp: ${LOG_LEVEL:INFO}
+    org.springframework.security: WARN
