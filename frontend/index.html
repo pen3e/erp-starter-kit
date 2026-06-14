@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <!--
+      Content-Security-Policy is intentionally NOT set as a <meta> here: a meta CSP is weaker
+      than an HTTP header and breaks Vite's dev HMR. Serve a strict CSP from your reverse proxy
+      / host in production. Recommended policy (see frontend/SECURITY.md):
+        default-src 'self'; connect-src 'self' https://api.your-domain;
+        img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self';
+        object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+    -->
+    <title>ERP Starter Kit</title>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

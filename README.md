@@ -181,8 +181,8 @@ backend/src/main/resources/db/migration   Flyway migrations (V1 schema, V2 permi
 
 Planned extension points — what is intentionally left for you to build on top of the foundation:
 
+- [x] React (Vite + shadcn/ui) frontend consuming this API — see [`frontend/`](./frontend).
 - [ ] Example business domain (`clients`) wiring the `CLIENT_*` permissions into a CRUD module — a template for your own entities.
-- [ ] React (Vite) frontend consuming this API.
 - [ ] Email delivery for password reset (the service already issues tokens and logs them in dev).
 - [ ] Automated test suite (Testcontainers is already on the classpath).
 - [ ] CI pipeline (build + test on push).
