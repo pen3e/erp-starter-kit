@@ -194,4 +194,4 @@ layout and security conventions, and describe the motivation in the PR.
 
 ## License
 
-Released under the **Apache License 2.0**.
+
