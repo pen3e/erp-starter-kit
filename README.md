@@ -1,6 +1,6 @@
 <div align="center">
 
-# ERP Starter Kit
+# SaaS multi-tenant Spring Boot
 
 **A secure, multi-tenant foundation for building SMB business & SaaS applications.**
 
