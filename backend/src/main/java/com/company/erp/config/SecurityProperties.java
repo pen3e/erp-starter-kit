@@ -44,5 +44,14 @@ public class SecurityProperties {
         private Duration authRefillPeriod = Duration.ofMinutes(1);
         private int maxFailedLogins = 5;
         private Duration lockoutDuration = Duration.ofMinutes(15);
+
+        /**
+         * Reverse-proxy / load-balancer addresses (single IPs or CIDR ranges, IPv4 or IPv6)
+         * that are permitted to set {@code X-Forwarded-For}. When empty (the default) the
+         * header is ignored entirely and the direct socket address is used — the safe choice
+         * for a directly-exposed service, and the only way to stop clients spoofing their IP
+         * to evade rate limiting.
+         */
+        private List<String> trustedProxies = List.of();
     }
 }

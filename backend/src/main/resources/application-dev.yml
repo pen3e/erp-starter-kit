@@ -1,0 +1,20 @@
+# =============================================================================
+# Development-only configuration overlay.
+#
+# Activate with:  --spring.profiles.active=dev   (or SPRING_PROFILES_ACTIVE=dev)
+#
+# Everything in this file is a throwaway local default. NEVER activate the 'dev'
+# profile in staging or production: the JWT secret and DB password below are
+# public knowledge and are deliberately rejected by JwtService outside the
+# dev/local/test profiles.
+# =============================================================================
+spring:
+  datasource:
+    # Local Postgres default; override with DB_PASSWORD if your local db differs.
+    password: ${DB_PASSWORD:erp}
+
+erp:
+  security:
+    jwt:
+      # Well-known, non-secret development key (Base64, 256-bit). Local use only.
+      secret: ${JWT_SECRET:Y2hhbmdlLW1lLXRoaXMtaXMtYS1kZXYtb25seS1zZWNyZXQta2V5LTEyMzQ1Njc4OTA=}

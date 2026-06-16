@@ -8,7 +8,8 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/erp}
     username: ${DB_USERNAME:erp}
-    password: ${DB_PASSWORD:erp}
+    # No default: production must supply DB_PASSWORD. The dev profile provides a local value.
+    password: ${DB_PASSWORD}
     hikari:
       pool-name: erp-pool
       maximum-pool-size: ${DB_POOL_MAX:10}
@@ -62,8 +63,10 @@ server:
 erp:
   security:
     jwt:
-      # Base64-encoded 256-bit (min) secret. MUST be overridden in every environment.
-      secret: ${JWT_SECRET:Y2hhbmdlLW1lLXRoaXMtaXMtYS1kZXYtb25seS1zZWNyZXQta2V5LTEyMzQ1Njc4OTA=}
+      # Base64-encoded 256-bit (min) secret. REQUIRED in every environment — no default here so a
+      # missing value fails fast at startup rather than silently signing with a known key.
+      # For local development, run with the 'dev' profile (see application-dev.yml).
+      secret: ${JWT_SECRET}
       issuer: erp-starter-kit
       access-token-ttl: ${JWT_ACCESS_TTL:PT15M}      # 15 minutes
       refresh-token-ttl: ${JWT_REFRESH_TTL:P7D}       # 7 days
@@ -81,6 +84,11 @@ erp:
       # Number of consecutive failed logins before the account is temporarily locked
       max-failed-logins: 5
       lockout-duration: PT15M
+      # Reverse-proxy / load-balancer IPs or CIDRs allowed to set X-Forwarded-For.
+      # Empty (default) => ignore the header and key off the direct socket address, so a
+      # client cannot spoof its IP to evade the limiter. Set to your ingress/proxy ranges
+      # when deployed behind one, e.g. RATE_LIMIT_TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
+      trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:}
   tenant:
     default-tenant: public
     header-name: X-Tenant-ID
