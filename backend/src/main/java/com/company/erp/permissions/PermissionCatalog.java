@@ -15,6 +15,8 @@ public final class PermissionCatalog {
     public static final String USER_CREATE = "USER_CREATE";
     public static final String USER_UPDATE = "USER_UPDATE";
     public static final String USER_DELETE = "USER_DELETE";
+    /** Required to assign/modify a user's roles — kept separate from plain profile edits. */
+    public static final String USER_ASSIGN_ROLE = "USER_ASSIGN_ROLE";
 
     // --- Role management ---
     public static final String ROLE_READ = "ROLE_READ";

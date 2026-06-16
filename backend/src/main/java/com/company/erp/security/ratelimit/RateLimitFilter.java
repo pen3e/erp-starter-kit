@@ -12,11 +12,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -32,12 +34,18 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimitService rateLimitService;
     private final ObjectMapper objectMapper;
     private final boolean enabled;
+    private final List<IpAddressMatcher> trustedProxies;
 
     public RateLimitFilter(RateLimitService rateLimitService, ObjectMapper objectMapper,
                            SecurityProperties properties) {
         this.rateLimitService = rateLimitService;
         this.objectMapper = objectMapper;
         this.enabled = properties.getRateLimit().isEnabled();
+        this.trustedProxies = properties.getRateLimit().getTrustedProxies().stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .map(IpAddressMatcher::new)
+                .toList();
     }
 
     @Override
@@ -76,12 +84,44 @@ public class RateLimitFilter extends OncePerRequestFilter {
         objectMapper.writeValue(response.getWriter(), body);
     }
 
-    /** Honour the first hop of X-Forwarded-For when behind a trusted proxy, else remote addr. */
+    /**
+     * Resolves the client IP used as the rate-limit key.
+     *
+     * <p>{@code X-Forwarded-For} is honoured <em>only</em> when the direct peer is a configured
+     * trusted proxy; otherwise the header is attacker-controlled and ignored. When trusted, the
+     * chain ("client, proxy1, proxy2") is walked right-to-left and the first hop that is not
+     * itself a trusted proxy is taken as the real client — so spoofed left-most entries cannot
+     * mint a fresh bucket per request and bypass the limiter.
+     */
     private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            return forwarded.split(",")[0].trim();
+        String remoteAddr = request.getRemoteAddr();
+        if (trustedProxies.isEmpty() || !isTrustedProxy(remoteAddr)) {
+            return remoteAddr;
         }
-        return request.getRemoteAddr();
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (!StringUtils.hasText(forwarded)) {
+            return remoteAddr;
+        }
+        String[] hops = forwarded.split(",");
+        for (int i = hops.length - 1; i >= 0; i--) {
+            String hop = hops[i].trim();
+            if (StringUtils.hasText(hop) && !isTrustedProxy(hop)) {
+                return hop;
+            }
+        }
+        return remoteAddr;
+    }
+
+    private boolean isTrustedProxy(String ip) {
+        for (IpAddressMatcher matcher : trustedProxies) {
+            try {
+                if (matcher.matches(ip)) {
+                    return true;
+                }
+            } catch (IllegalArgumentException ignored) {
+                // Not a parseable IP literal (e.g. a malformed/obfuscated header value) — untrusted.
+            }
+        }
+        return false;
     }
 }

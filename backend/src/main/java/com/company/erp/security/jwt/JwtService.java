@@ -8,7 +8,10 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.time.Duration;
@@ -36,13 +39,56 @@ public class JwtService {
     private static final String CLAIM_AUTHORITIES = "authorities";
     private static final String CLAIM_REMEMBER = "rmb";
 
+    /** Minimum key material for HMAC-SHA256 (RFC 7518 §3.2). */
+    private static final int MIN_SECRET_BYTES = 32;
+
+    /**
+     * The throwaway secret shipped for local development (see {@code application-dev.yml}).
+     * It is public knowledge, so it is rejected at startup unless a non-production profile
+     * is active — preventing a deployment from silently signing tokens with a known key.
+     */
+    private static final String KNOWN_DEV_SECRET =
+            "Y2hhbmdlLW1lLXRoaXMtaXMtYS1kZXYtb25seS1zZWNyZXQta2V5LTEyMzQ1Njc4OTA=";
+
+    /** Profiles under which the well-known dev secret is tolerated. */
+    private static final Profiles NON_PRODUCTION = Profiles.of("dev", "local", "test");
+
     private final SecretKey signingKey;
     private final SecurityProperties.Jwt props;
 
-    public JwtService(SecurityProperties securityProperties) {
+    public JwtService(SecurityProperties securityProperties, Environment environment) {
         this.props = securityProperties.getJwt();
-        byte[] keyBytes = Decoders.BASE64.decode(props.getSecret());
-        this.signingKey = Keys.hmacShaKeyFor(keyBytes);
+        this.signingKey = buildSigningKey(props.getSecret(), environment);
+    }
+
+    /**
+     * Validates and builds the signing key, failing fast (so the context never starts) when the
+     * secret is missing, malformed, too weak, or the public dev secret in a production profile.
+     */
+    private static SecretKey buildSigningKey(String secret, Environment environment) {
+        if (!StringUtils.hasText(secret)) {
+            throw new IllegalStateException(
+                    "JWT signing secret is not configured. Set the JWT_SECRET environment variable to a "
+                            + "Base64-encoded value of at least 256 bits (run the dev profile for a local default).");
+        }
+        boolean nonProduction = environment.acceptsProfiles(NON_PRODUCTION);
+        if (!nonProduction && KNOWN_DEV_SECRET.equals(secret)) {
+            throw new IllegalStateException(
+                    "Refusing to start: the built-in development JWT secret is in use outside a dev/local/test "
+                            + "profile. Provide a unique, secret JWT_SECRET for this environment.");
+        }
+        byte[] keyBytes;
+        try {
+            keyBytes = Decoders.BASE64.decode(secret);
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException("JWT_SECRET must be a valid Base64 string.", ex);
+        }
+        if (keyBytes.length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is too weak: decoded length is %d bytes but at least %d (256 bits) are required."
+                            .formatted(keyBytes.length, MIN_SECRET_BYTES));
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public IssuedToken generateAccessToken(UUID userId, String email, String tenantId,

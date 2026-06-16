@@ -6,6 +6,8 @@ import com.company.erp.common.exception.BusinessRuleException;
 import com.company.erp.common.exception.DuplicateResourceException;
 import com.company.erp.common.exception.ResourceNotFoundException;
 import com.company.erp.common.util.InputSanitizer;
+import com.company.erp.permissions.PermissionCatalog;
+import com.company.erp.permissions.entity.Permission;
 import com.company.erp.roles.entity.Role;
 import com.company.erp.roles.repository.RoleRepository;
 import com.company.erp.security.SecurityUtils;
@@ -16,6 +18,8 @@ import com.company.erp.users.entity.User;
 import com.company.erp.users.entity.UserStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +29,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Tenant-scoped user administration. Every query/write is implicitly constrained to the
@@ -74,7 +79,9 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setPasswordChangedAt(Instant.now());
         user.setStatus(UserStatus.ACTIVE);
-        user.setRoles(resolveRoles(request.roleIds()));
+        Set<Role> roles = resolveRoles(request.roleIds());
+        guardRoleAssignment(roles, null);
+        user.setRoles(roles);
         User saved = userRepository.save(user);
 
         audit.entityChange(AuditAction.CREATE, SecurityUtils.currentUserId(), SecurityUtils.currentUserEmail(),
@@ -100,7 +107,9 @@ public class UserService {
             user.setStatus(request.status());
         }
         if (request.roleIds() != null) {
-            user.setRoles(resolveRoles(request.roleIds()));
+            Set<Role> roles = resolveRoles(request.roleIds());
+            guardRoleAssignment(roles, id);
+            user.setRoles(roles);
         }
         User saved = userRepository.save(user);
 
@@ -133,5 +142,46 @@ public class UserService {
             throw new BusinessRuleException("One or more role ids are invalid");
         }
         return new HashSet<>(found);
+    }
+
+    /**
+     * Prevents privilege escalation when assigning roles. Three invariants:
+     * <ol>
+     *   <li>the caller must hold the dedicated {@code USER_ASSIGN_ROLE} permission;</li>
+     *   <li>the caller may not modify their <em>own</em> role assignments;</li>
+     *   <li>the caller may only grant permissions they already hold (no granting "up").</li>
+     * </ol>
+     * Granting an empty role set cannot escalate, so it is exempt from the permission/superset
+     * checks (it is reached only on create, never as a self-edit).
+     *
+     * @param requestedRoles roles to be assigned (permissions are read lazily within the tx)
+     * @param targetUserId   the user being modified, or {@code null} when creating a new user
+     */
+    private void guardRoleAssignment(Set<Role> requestedRoles, UUID targetUserId) {
+        if (requestedRoles.isEmpty()) {
+            return;
+        }
+        Set<String> callerAuthorities = currentAuthorities();
+        if (!callerAuthorities.contains(PermissionCatalog.USER_ASSIGN_ROLE)) {
+            throw new AccessDeniedException("You are not allowed to assign roles to users");
+        }
+        if (targetUserId != null && targetUserId.equals(SecurityUtils.currentUserId())) {
+            throw new BusinessRuleException("You cannot change your own role assignments");
+        }
+        Set<String> grantedPermissions = requestedRoles.stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .map(Permission::getName)
+                .collect(Collectors.toUnmodifiableSet());
+        if (!callerAuthorities.containsAll(grantedPermissions)) {
+            throw new AccessDeniedException("You cannot grant permissions you do not currently hold");
+        }
+    }
+
+    private Set<String> currentAuthorities() {
+        return SecurityUtils.currentPrincipal()
+                .map(principal -> principal.getAuthorities().stream()
+                        .map(GrantedAuthority::getAuthority)
+                        .collect(Collectors.toSet()))
+                .orElseGet(Set::of);
     }
 }
